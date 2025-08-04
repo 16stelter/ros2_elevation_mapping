@@ -8,6 +8,8 @@
 
 #pragma once
 
+#include <rclcpp/rclcpp.hpp>
+
 namespace elevation_mapping {
 
 template <typename Scalar>

@@ -18,7 +18,7 @@
 #include <kindr/Core>
 
 // ROS
-#include <ros/ros.h>
+#include <rclcpp/rclcpp.hpp>
 
 namespace elevation_mapping {
 

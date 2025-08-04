@@ -6,7 +6,6 @@
  *   Institute: ETH Zurich, ANYbotics
  */
 
-#include <ros/ros.h>
 #include "elevation_mapping/ElevationMapping.hpp"
 
 int main(int argc, char** argv) {

@@ -11,6 +11,7 @@
 #include <iostream>
 #include <map>
 #include <stdexcept>
+#include <rclcpp/rclcpp.hpp>
 
 namespace elevation_mapping {
 

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <rclcpp/rclcpp.hpp>
 #include "elevation_mapping/PointXYZRGBConfidenceRatio.hpp"
 #include "elevation_mapping/sensor_processors/SensorProcessorBase.hpp"
 

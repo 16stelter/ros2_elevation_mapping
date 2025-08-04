@@ -2,6 +2,7 @@
 
 #include <mutex>
 #include <thread>
+#include <rclcpp/rclcpp.hpp>
 
 namespace elevation_mapping {
 

@@ -8,6 +8,7 @@
 
 #pragma once
 
+#include <rclcpp/rclcpp.hpp>
 #include <boost/asio.hpp>
 #include <boost/thread.hpp>
 #include <thread>

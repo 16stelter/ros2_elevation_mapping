@@ -1,33 +1,34 @@
 /*
- * StructuredLightSensorProcessor.hpp
+ * PerfectSensorProcessor.hpp
  *
- *  Created on: Feb 5, 2014
+ *  Created on: Sep 28, 2014
  *      Author: Péter Fankhauser
  *   Institute: ETH Zurich, ANYbotics
  */
 
 #pragma once
 
-#include <elevation_mapping/sensor_processors/SensorProcessorBase.hpp>
+#include <rclcpp/rclcpp.hpp>
 #include "elevation_mapping/PointXYZRGBConfidenceRatio.hpp"
+#include "elevation_mapping/sensor_processors/SensorProcessorBase.hpp"
 
 namespace elevation_mapping {
 
 /*!
- * Sensor processor for StructuredLight-type (PrimeSense) structured light sensors.
+ * Sensor processor for laser range sensors.
  */
-class StructuredLightSensorProcessor : public SensorProcessorBase {
+class PerfectSensorProcessor : public SensorProcessorBase {
  public:
   /*!
    * Constructor.
    * @param nodeHandle the ROS node handle.
    */
-  StructuredLightSensorProcessor(ros::NodeHandle& nodeHandle, const SensorProcessorBase::GeneralParameters& generalParameters);
+  PerfectSensorProcessor(ros::NodeHandle& nodeHandle, const SensorProcessorBase::GeneralParameters& generalParameters);
 
   /*!
    * Destructor.
    */
-  ~StructuredLightSensorProcessor() override;
+  ~PerfectSensorProcessor() override;
 
  private:
   /*!
@@ -46,12 +47,6 @@ class StructuredLightSensorProcessor : public SensorProcessorBase {
    */
   bool computeVariances(PointCloudType::ConstPtr pointCloud, const Eigen::Matrix<double, 6, 6>& robotPoseCovariance,
                         Eigen::VectorXf& variances) override;
-
-  /*!
-   * Cuts off points that are not within the cutoff interval
-   * @param pointCloud the point cloud to filter.
-   * @return true if successful.
-   */
-  bool filterPointCloudSensorType(PointCloudType::Ptr pointCloud) override;
 };
+
 } /* namespace elevation_mapping */

@@ -11,7 +11,7 @@
 #include "elevation_mapping/input_sources/Input.hpp"
 
 #include <XmlRpc.h>
-#include <ros/ros.h>
+#include <rclcpp/rclcpp.hpp>
 
 namespace elevation_mapping {
 class ElevationMapping;  // Forward declare to avoid cyclic import dependency.

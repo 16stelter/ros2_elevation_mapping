@@ -9,7 +9,7 @@
 #pragma once
 
 #include <XmlRpc.h>
-#include <ros/ros.h>
+#include <rclcpp/rclcpp.hpp>
 #include <string>
 
 #include "elevation_mapping/ThreadSafeDataWrapper.hpp"
