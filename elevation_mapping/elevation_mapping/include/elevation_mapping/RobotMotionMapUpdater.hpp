@@ -36,7 +36,7 @@ class RobotMotionMapUpdater {
   /*!
    * Constructor.
    */
-  explicit RobotMotionMapUpdater(ros::NodeHandle nodeHandle);
+  explicit RobotMotionMapUpdater(rclcpp::Node node);
 
   /*!
    * Destructor.
@@ -58,7 +58,7 @@ class RobotMotionMapUpdater {
    * @param[in] time the time of the current update.
    * @return true if successful.
    */
-  bool update(ElevationMap& map, const Pose& robotPose, const PoseCovariance& robotPoseCovariance, const ros::Time& time);
+  bool update(ElevationMap& map, const Pose& robotPose, const PoseCovariance& robotPoseCovariance, const rclcpp::Time& time);
 
  private:
   /*!
@@ -81,10 +81,10 @@ class RobotMotionMapUpdater {
   bool computeRelativeCovariance(const Pose& robotPose, const ReducedCovariance& reducedCovariance, ReducedCovariance& relativeCovariance);
 
   //! ROS nodehandle.
-  ros::NodeHandle nodeHandle_;
+  rclcpp::Node node_;
 
   //! Time of the previous update.
-  ros::Time previousUpdateTime_;
+  rclcpp::Time previousUpdateTime_;
 
   //! Previous robot pose.
   Pose previousRobotPose_;

@@ -14,21 +14,21 @@
 
 namespace elevation_mapping {
 
-RobotMotionMapUpdater::RobotMotionMapUpdater(ros::NodeHandle nodeHandle) : nodeHandle_(nodeHandle), covarianceScale_(1.0) {
+RobotMotionMapUpdater::RobotMotionMapUpdater(rclcpp::Node node) : node_(node), covarianceScale_(1.0) {
   previousReducedCovariance_.setZero();
-  previousUpdateTime_ = ros::Time::now();
+  previousUpdateTime_ = rclcpp::Time::now();
   // TODO(max): How to initialize previousRobotPose_?
 }
 
 RobotMotionMapUpdater::~RobotMotionMapUpdater() = default;
 
 bool RobotMotionMapUpdater::readParameters() {
-  nodeHandle_.param("robot_motion_map_update/covariance_scale", covarianceScale_, 1.0);
+  node_.param("robot_motion_map_update/covariance_scale", covarianceScale_, 1.0);
   return true;
 }
 
 bool RobotMotionMapUpdater::update(ElevationMap& map, const Pose& robotPose, const PoseCovariance& robotPoseCovariance,
-                                   const ros::Time& time) {
+                                   const rclcpp::Time& time) {
   const PoseCovariance robotPoseCovarianceScaled = covarianceScale_ * robotPoseCovariance;
 
   // Check if update necessary.

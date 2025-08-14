@@ -52,9 +52,9 @@ class ElevationMapping {
   /*!
    * Constructor.
    *
-   * @param nodeHandle the ROS node handle.
+   * @param node the ROS node handle.
    */
-  explicit ElevationMapping(ros::NodeHandle& nodeHandle);
+  explicit ElevationMapping(rclcpp::Node& node);
 
   /*!
    * Destructor.
@@ -78,7 +78,7 @@ class ElevationMapping {
    *
    * @param timerEvent    The timer event.
    */
-  void mapUpdateTimerCallback(const ros::TimerEvent& timerEvent);
+  void mapUpdateTimerCallback(const rclcpp::TimerEvent& timerEvent);
 
   /*!
    * Callback function for the fused map publish timer. Publishes the fused map
@@ -86,14 +86,14 @@ class ElevationMapping {
    *
    * @param timerEvent    The timer event.
    */
-  void publishFusedMapCallback(const ros::TimerEvent& timerEvent);
+  void publishFusedMapCallback(const rorclcpps::TimerEvent& timerEvent);
 
   /*!
    * Callback function for cleaning map based on visibility ray tracing.
    *
    * @param timerEvent  The timer event.
    */
-  void visibilityCleanupCallback(const ros::TimerEvent& timerEvent);
+  void visibilityCleanupCallback(const rclcpp::TimerEvent& timerEvent);
 
   /*!
    * ROS service callback function to trigger the fusion of the entire
@@ -268,7 +268,7 @@ class ElevationMapping {
   bool isFusingEnabled();
 
   //! ROS nodehandle.
-  ros::NodeHandle nodeHandle_;
+  rclcpp::Node node_;
 
  protected:
   //! Input sources.
@@ -374,16 +374,16 @@ class ElevationMapping {
   RobotMotionMapUpdater robotMotionMapUpdater_;
 
   //! Timer for the robot motion update.
-  ros::Timer mapUpdateTimer_;
+  rclcpp::TimerBase::SharedPtr mapUpdateTimer_;
 
   //! Time of the last point cloud update.
   ros::Time lastPointCloudUpdateTime_;
 
   //! Timer for publishing the fused map.
-  ros::Timer fusedMapPublishTimer_;
+  rclcpp::TimerBase::SharedPtr fusedMapPublishTimer_;
 
   //! Timer for the raytracing cleanup.
-  ros::Timer visibilityCleanupTimer_;
+  rclcpp::TimerBase::SharedPtr visibilityCleanupTimer_;
 
   //! Callback queue for raytracing cleanup thread.
   ros::CallbackQueue visibilityCleanupQueue_;
