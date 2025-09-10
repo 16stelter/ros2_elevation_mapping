@@ -10,6 +10,8 @@ find_package(rclcpp REQUIRED)
 find_package(grid_map_core REQUIRED)
 find_package(grid_map_ros REQUIRED)
 find_package(grid_map_msgs REQUIRED)
+find_package(grid_map_costmap_2d REQUIRED)
+find_package(nav2_costmap_2d REQUIRED)
 find_package(tf2 REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_geometry_msgs REQUIRED)
@@ -29,6 +31,7 @@ ament_target_dependencies(
   grid_map_core
   grid_map_ros
   grid_map_msgs
+  grid_map_costmap_2d
   tf2
   tf2_ros
   tf2_geometry_msgs

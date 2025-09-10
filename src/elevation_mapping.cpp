@@ -21,10 +21,12 @@ ElevationMapping::ElevationMapping(rclcpp::Node::SharedPtr node,
 void ElevationMapping::init_gridmap()
 {
   gridmap_ = grid_map::GridMap({"elevation"});
-  gridmap_.setFrameId("base_link");
+  gridmap_.setFrameId("odom");
   gridmap_.setGeometry(grid_map::Length(5.0, 5.0), 0.05);
   gridmap_pub_->publish(grid_map::GridMapRosConverter::toMessage(gridmap_));
+  feature_pub_ = node_->create_publisher<sensor_msgs::msg::PointCloud2>("feature_map", 10);
   RCLCPP_INFO(node_->get_logger(), "Initialized grid map with size: (%i, %i)", gridmap_.getSize()(0), gridmap_.getSize()(1));
+  converter_.initializeFromGridMap(gridmap_, costmap_);
 
 }
 
@@ -32,8 +34,23 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
 {
   sensor_msgs::msg::PointCloud2 cloud_transformed;
   try {
+    // create transform if it does not exist
+    if (!tf_buffer_.canTransform("odom", "base_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1))) { //todo: parametrize frames
+      geometry_msgs::msg::TransformStamped transform;
+      transform.header.stamp = msg->header.stamp;
+      transform.header.frame_id = "odom";
+      transform.child_frame_id = "base_link";
+      transform.transform.translation.x = 0.0;
+      transform.transform.translation.y = 0.0;
+      transform.transform.translation.z = 0.0;
+      transform.transform.rotation.w = 1.0;
+      transform.transform.rotation.x = 0.0;
+      transform.transform.rotation.y = 0.0;
+      transform.transform.rotation.z = 0.0;
+      tf_buffer_.setTransform(transform, "default_authority");
+    }
     geometry_msgs::msg::TransformStamped transform =
-    tf_buffer_.lookupTransform("base_link", msg->header.frame_id, msg->header.stamp,
+    tf_buffer_.lookupTransform("odom", msg->header.frame_id, msg->header.stamp,
                                rclcpp::Duration::from_seconds(0.1));
     tf2::doTransform(*msg, cloud_transformed, transform);
   } catch (tf2::TransformException &e) {
@@ -52,6 +69,13 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
       cell_points[{i[0], i[1]}].push_back(*iter_z);
     }
   }
+
+  sensor_msgs::msg::PointCloud2 feature_cloud;
+  feature_cloud.header = cloud_transformed.header;
+  feature_cloud.height = 1;
+  feature_cloud.is_dense = false;
+  feature_cloud.is_bigendian = false;
+  std::vector<std::array<float, 4>> features;
   for(auto &c : cell_points)
   {
     auto i = c.first;
@@ -61,10 +85,67 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
     idx[0] = i.first;
     idx[1] = i.second;
     gridmap_.at("elevation", idx) = avg_z;
-  }
+    float max_slope = 0.0;
 
+    grid_map::Index neighbours[8] = {
+      grid_map::Index{idx[0]-1, idx[1]-1},
+      grid_map::Index{idx[0]-1, idx[1]},
+      grid_map::Index{idx[0]-1, idx[1]+1},
+      grid_map::Index{idx[0], idx[1]-1},
+      grid_map::Index{idx[0], idx[1]+1},
+      grid_map::Index{idx[0]+1, idx[1]-1},
+      grid_map::Index{idx[0]+1, idx[1]},
+      grid_map::Index{idx[0]+1, idx[1]+1}
+    };
+    for(auto &n : neighbours)
+    {
+      if (n[0] >= 0 && n[0] < static_cast<int>(gridmap_.getSize()(0)) &&
+          n[1] >= 0 && n[1] < static_cast<int>(gridmap_.getSize()(1)))
+      {
+        float dz = avg_z - gridmap_.at("elevation", n);
+        float distance = gridmap_.getResolution();
+        if(n[0] != idx[0] && n[1] != idx[1])
+        {
+          distance *= std::sqrt(2.0);
+        }
+        float slope = std::atan(dz / distance) * 180.0 / M_PI;
+        max_slope = std::max(max_slope, std::abs(slope));
+      }
+    }
+    if (max_slope > 40.0) //todo: parametrize
+    {
+      grid_map::Position pos;
+      gridmap_.getPosition(idx, pos);
+      features.push_back({static_cast<float>(pos.x()), 
+                    static_cast<float>(pos.y()), 
+                    static_cast<float>(avg_z), 
+                    static_cast<float>(max_slope)});
+    }
+  }
+  
+  sensor_msgs::PointCloud2Modifier modifier(feature_cloud);
+  modifier.setPointCloud2Fields(4, 
+    "x", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "y", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "z", 1, sensor_msgs::msg::PointField::FLOAT32,
+    "intensity", 1, sensor_msgs::msg::PointField::FLOAT32);
+  modifier.resize(features.size());
+  sensor_msgs::PointCloud2Iterator<float> out_x(feature_cloud, "x");
+  sensor_msgs::PointCloud2Iterator<float> out_y(feature_cloud, "y");
+  sensor_msgs::PointCloud2Iterator<float> out_z(feature_cloud, "z");
+  sensor_msgs::PointCloud2Iterator<float> out_intensity(feature_cloud, "intensity");
+  for(auto &f : features)
+  {
+    *out_x = f[0];
+    *out_y = f[1];
+    *out_z = f[2];
+    *out_intensity = f[3];
+    ++out_x; ++out_y; ++out_z; ++out_intensity;
+  }
   auto message = grid_map::GridMapRosConverter::toMessage(gridmap_);
   gridmap_pub_->publish(*message);
+  feature_pub_->publish(feature_cloud);
+  converter_.setCostmap2DFromGridMap(gridmap_, "elevation", costmap_);
 }
 
 } // namespace elevation_mapping
