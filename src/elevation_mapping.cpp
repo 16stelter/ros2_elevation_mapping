@@ -21,7 +21,7 @@ ElevationMapping::ElevationMapping(rclcpp::Node::SharedPtr node,
 void ElevationMapping::init_gridmap()
 {
   gridmap_ = grid_map::GridMap({"elevation"});
-  gridmap_.setFrameId("base_link");
+  gridmap_.setFrameId("odom");
   gridmap_.setGeometry(grid_map::Length(5.0, 5.0), 0.05);
   gridmap_pub_->publish(grid_map::GridMapRosConverter::toMessage(gridmap_));
   RCLCPP_INFO(node_->get_logger(), "Initialized grid map with size: (%i, %i)", gridmap_.getSize()(0), gridmap_.getSize()(1));
@@ -32,8 +32,22 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
 {
   sensor_msgs::msg::PointCloud2 cloud_transformed;
   try {
+    if (!tf_buffer_.canTransform("odom", "base_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1))) { //todo: parametrize frames
+      geometry_msgs::msg::TransformStamped transform;
+      transform.header.stamp = msg->header.stamp;
+      transform.header.frame_id = "odom";
+      transform.child_frame_id = "base_link";
+      transform.transform.translation.x = 0.0;
+      transform.transform.translation.y = 0.0;
+      transform.transform.translation.z = 0.0;
+      transform.transform.rotation.w = 1.0;
+      transform.transform.rotation.x = 0.0;
+      transform.transform.rotation.y = 0.0;
+      transform.transform.rotation.z = 0.0;
+      tf_buffer_.setTransform(transform, "default_authority");
+    }
     geometry_msgs::msg::TransformStamped transform =
-    tf_buffer_.lookupTransform("base_link", msg->header.frame_id, msg->header.stamp,
+    tf_buffer_.lookupTransform("odom", msg->header.frame_id, msg->header.stamp,
                                rclcpp::Duration::from_seconds(0.1));
     tf2::doTransform(*msg, cloud_transformed, transform);
   } catch (tf2::TransformException &e) {
