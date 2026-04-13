@@ -10,7 +10,7 @@ ElevationMapping::ElevationMapping(rclcpp::Node::SharedPtr node,
   tf_listener_(tf_buffer_)
 {
   pointcloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
-    "pointcloud",
+    "pointcloud/points",
     10,
     std::bind(&ElevationMapping::pointcloud_callback, this, std::placeholders::_1)
   );
@@ -32,19 +32,9 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
 {
   sensor_msgs::msg::PointCloud2 cloud_transformed;
   try {
-    if (!tf_buffer_.canTransform("odom", "base_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1))) { //todo: parametrize frames
-      geometry_msgs::msg::TransformStamped transform;
-      transform.header.stamp = msg->header.stamp;
-      transform.header.frame_id = "odom";
-      transform.child_frame_id = "base_link";
-      transform.transform.translation.x = 0.0;
-      transform.transform.translation.y = 0.0;
-      transform.transform.translation.z = 0.0;
-      transform.transform.rotation.w = 1.0;
-      transform.transform.rotation.x = 0.0;
-      transform.transform.rotation.y = 0.0;
-      transform.transform.rotation.z = 0.0;
-      tf_buffer_.setTransform(transform, "default_authority");
+    if (!tf_buffer_.canTransform("odom", "base_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1))) {
+      RCLCPP_WARN(node_->get_logger(), "Transform failed.");
+      return;
     }
     geometry_msgs::msg::TransformStamped transform =
     tf_buffer_.lookupTransform("odom", msg->header.frame_id, msg->header.stamp,
@@ -58,14 +48,37 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
   sensor_msgs::PointCloud2ConstIterator<float> iter_x(cloud_transformed, "x");
   sensor_msgs::PointCloud2ConstIterator<float> iter_y(cloud_transformed, "y");
   sensor_msgs::PointCloud2ConstIterator<float> iter_z(cloud_transformed, "z");
+  std::vector<double> dims(4, 0.0);
   std::map<std::pair<int, int>, std::vector<float>> cell_points;
   
   for(; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-    grid_map::Index i;
-    if(gridmap_.getIndex(grid_map::Position(*iter_x, *iter_y), i)) {
-      cell_points[{i[0], i[1]}].push_back(*iter_z);
+
+    grid_map::Position p(*iter_x, *iter_y);
+    if (!std::isinf(p[0]) && !std::isinf(p[1])) {
+      if (!gridmap_.isInside(p)) {
+        dims[0] = std::min(dims[0], p[0]);
+        dims[1] = std::min(dims[1], p[1]);
+        dims[2] = std::max(dims[2], p[0]);
+        dims[3] = std::max(dims[3], p[1]);
+      }
+
+      grid_map::Index i;
+      if(gridmap_.getIndex(grid_map::Position(*iter_x, *iter_y), i)) {
+        cell_points[{i[0], i[1]}].push_back(*iter_z);
+      }
     }
   }
+
+  if(std::any_of(dims.begin(), dims.end(), [](double val) { return val != 0.0; }))
+  {
+    dims = {dims[0] - 0.05, dims[1] - 0.05, dims[2] + 0.05, dims[3] + 0.05};
+    grid_map::GridMap new_grid;
+    grid_map::Length new_length = grid_map::Length((dims[2] - dims[0]), (dims[3] - dims[1]));
+    grid_map::Position new_origin((dims[0] + dims[2]) / 2, (dims[1] + dims[3]) / 2);
+    new_grid.setGeometry(new_length, 0.05, new_origin);
+    gridmap_.extendToInclude(new_grid);
+  }
+
   for(auto &c : cell_points)
   {
     auto i = c.first;
