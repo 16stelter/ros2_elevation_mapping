@@ -11,7 +11,7 @@ elevation_map:
         params:
           input_layer: elevation
           output_layers_prefix: normal_vectors_
-          radius: 1.0
+          radius: 0.1
           normal_vector_positive_axis: z
 
       filter2:  # Compute slope from surface normal.
