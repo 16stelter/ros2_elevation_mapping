@@ -10,6 +10,7 @@
 #include <tf2_sensor_msgs/tf2_sensor_msgs.hpp>
 #include <sensor_msgs/msg/point_cloud2.hpp>
 #include <sensor_msgs/point_cloud2_iterator.hpp>
+#include <filters/filter_chain.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 namespace elevation_mapping {
@@ -25,6 +26,11 @@ class ElevationMapping {
     rclcpp::Subscription<sensor_msgs::msg::PointCloud2>::SharedPtr pointcloud_sub_;
     rclcpp::Publisher<grid_map_msgs::msg::GridMap>::SharedPtr gridmap_pub_;
     grid_map::GridMap gridmap_;
+
+    std::string map_frame_;
+    double alpha_;
+
+    filters::FilterChain<grid_map::GridMap> filterChain_;
 
     /*
      * Create an empty grid map with a specified geometry.

@@ -1,0 +1,22 @@
+elevation_map:
+  ros__parameters:
+    pointcloud_topic: "pointcloud/points"
+    map_frame: "odom"
+    map_topic: "grid_map"
+    use_sim_time: true
+    filters:
+      filter1:  # Compute surface normals.
+        name: surface_normals
+        type: gridMapFilters/NormalVectorsFilter
+        params:
+          input_layer: elevation
+          output_layers_prefix: normal_vectors_
+          radius: 1.0
+          normal_vector_positive_axis: z
+
+      filter2:  # Compute slope from surface normal.
+        name: slope
+        type: gridMapFilters/MathExpressionFilter
+        params:
+          output_layer: slope
+          expression: acos(normal_vectors_z)

@@ -7,24 +7,42 @@ ElevationMapping::ElevationMapping(rclcpp::Node::SharedPtr node,
                            std::vector<rclcpp::Parameter> parameters)
 : node_(node),
   tf_buffer_(node->get_clock()),
-  tf_listener_(tf_buffer_)
+  tf_listener_(tf_buffer_),
+  filterChain_("grid_map::GridMap")
 {
+
+  node_->declare_parameter("pointcloud_topic", "");
+  node_->declare_parameter("map_topic", "");
+
+  map_frame_ = node_->declare_parameter("map_frame", "");
+
   pointcloud_sub_ = node_->create_subscription<sensor_msgs::msg::PointCloud2>(
-    "pointcloud/points",
-    10,
+    node_->get_parameter("pointcloud_topic").as_string(),
+    rclcpp::QoS(rclcpp::KeepLast(10)).best_effort(),
     std::bind(&ElevationMapping::pointcloud_callback, this, std::placeholders::_1)
   );
-  gridmap_pub_ = node_->create_publisher<grid_map_msgs::msg::GridMap>("grid_map", 10);
+  gridmap_pub_ = node_->create_publisher<grid_map_msgs::msg::GridMap>(node_->get_parameter("map_topic").as_string(), 10);
   init_gridmap();
 }
 
 void ElevationMapping::init_gridmap()
 {
-  gridmap_ = grid_map::GridMap({"elevation"});
-  gridmap_.setFrameId("odom");
+  gridmap_ = grid_map::GridMap({"elevation", "variance"});
+  gridmap_.setFrameId(map_frame_);
   gridmap_.setGeometry(grid_map::Length(5.0, 5.0), 0.05);
   gridmap_pub_->publish(grid_map::GridMapRosConverter::toMessage(gridmap_));
+  alpha_ = 0.2; //todo: make parameter
   RCLCPP_INFO(node_->get_logger(), "Initialized grid map with size: (%i, %i)", gridmap_.getSize()(0), gridmap_.getSize()(1));
+  if (filterChain_.configure(
+      "filters", node_->get_node_logging_interface(),
+      node_->get_node_parameters_interface()))
+  {
+    RCLCPP_INFO(node_->get_logger(), "Filter chain configured.");
+  } else {
+    RCLCPP_ERROR(node_->get_logger(), "Could not configure the filter chain!");
+    rclcpp::shutdown();
+    return;
+  }
 
 }
 
@@ -32,12 +50,8 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
 {
   sensor_msgs::msg::PointCloud2 cloud_transformed;
   try {
-    if (!tf_buffer_.canTransform("odom", "base_link", msg->header.stamp, rclcpp::Duration::from_seconds(0.1))) {
-      RCLCPP_WARN(node_->get_logger(), "Transform failed.");
-      return;
-    }
     geometry_msgs::msg::TransformStamped transform =
-    tf_buffer_.lookupTransform("odom", msg->header.frame_id, msg->header.stamp,
+    tf_buffer_.lookupTransform(map_frame_, msg->header.frame_id, msg->header.stamp,
                                rclcpp::Duration::from_seconds(0.1));
     tf2::doTransform(*msg, cloud_transformed, transform);
   } catch (tf2::TransformException &e) {
@@ -83,14 +97,30 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
   {
     auto i = c.first;
     auto &vs = c.second;
-    float avg_z = std::accumulate(vs.begin(), vs.end(), 0.0f) / vs.size();
-    grid_map::Index idx;
-    idx[0] = i.first;
-    idx[1] = i.second;
-    gridmap_.at("elevation", idx) = avg_z;
+    if (vs.size() > 0) {
+      float avg_z = std::accumulate(vs.begin(), vs.end(), 0.0f) / vs.size();
+      grid_map::Index idx;
+      idx[0] = i.first;
+      idx[1] = i.second;
+      if (!gridmap_.isValid(idx, "elevation")) {
+        gridmap_.at("elevation", idx) = avg_z;
+      }
+      else {
+        float last_z = gridmap_.at("elevation", idx);
+        gridmap_.at("elevation", idx) = (1.0 - alpha_) * last_z + alpha_ * avg_z;
+      }
+
+    }
   }
 
-  auto message = grid_map::GridMapRosConverter::toMessage(gridmap_);
+  grid_map::GridMap filtered_gridmap;
+  if (!filterChain_.update(gridmap_, filtered_gridmap)) {
+    RCLCPP_ERROR(node_->get_logger(), "Could not update the grid map filter chain!");
+    return;
+  }
+
+  auto message = grid_map::GridMapRosConverter::toMessage(filtered_gridmap);
+  message->header.stamp = node_->now();
   gridmap_pub_->publish(*message);
 }
 

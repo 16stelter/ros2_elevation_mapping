@@ -1,0 +1,5 @@
+elevation_map:
+  ros__parameters:
+    pointcloud_topic: "utlidar/cloud_deskewed"
+    map_frame: "odom"
+    map_topic: "grid_map"
