@@ -86,6 +86,9 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
     new_frame.setGeometry(grid_map::Length((dims[2] - dims[0]), (dims[3] - dims[1])), 
                           0.05, 
                           grid_map::Position((dims[0] + dims[2]) / 2, (dims[1] + dims[3]) / 2));
+    bool success;
+    gridmap_.extendToInclude(new_frame);
+    new_frame = gridmap_.getSubmap(grid_map::Position((dims[0] + dims[2]) / 2, (dims[1] + dims[3]) / 2), grid_map::Length((dims[2] - dims[0]), (dims[3] - dims[1])), success);
     grid_map::Index i;
 
     sensor_msgs::PointCloud2ConstIterator<float> iter_x(cloud_transformed, "x");
