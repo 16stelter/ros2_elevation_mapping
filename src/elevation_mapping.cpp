@@ -27,7 +27,7 @@ ElevationMapping::ElevationMapping(rclcpp::Node::SharedPtr node,
 
 void ElevationMapping::init_gridmap()
 {
-  gridmap_ = grid_map::GridMap({"elevation", "variance"});
+  gridmap_ = grid_map::GridMap({"elevation", "slope"});
   gridmap_.setFrameId(map_frame_);
   gridmap_.setGeometry(grid_map::Length(5.0, 5.0), 0.05);
   gridmap_pub_->publish(grid_map::GridMapRosConverter::toMessage(gridmap_));
@@ -54,7 +54,8 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
     tf_buffer_.lookupTransform(map_frame_, msg->header.frame_id, msg->header.stamp,
                                rclcpp::Duration::from_seconds(0.1));
     tf2::doTransform(*msg, cloud_transformed, transform);
-  } catch (tf2::TransformException &e) {
+  } 
+  catch (tf2::TransformException &e) {
     RCLCPP_WARN(node_->get_logger(), "Transform failed: %s", e.what());
     return;
   }
@@ -62,66 +63,75 @@ void ElevationMapping::pointcloud_callback(const sensor_msgs::msg::PointCloud2::
   sensor_msgs::PointCloud2ConstIterator<float> iter_x(cloud_transformed, "x");
   sensor_msgs::PointCloud2ConstIterator<float> iter_y(cloud_transformed, "y");
   sensor_msgs::PointCloud2ConstIterator<float> iter_z(cloud_transformed, "z");
-  std::vector<double> dims(4, 0.0);
+  std::vector<double> dims = {std::numeric_limits<double>::infinity(),
+                              std::numeric_limits<double>::infinity(),
+                              -std::numeric_limits<double>::infinity(),
+                              -std::numeric_limits<double>::infinity()};
   std::map<std::pair<int, int>, std::vector<float>> cell_points;
   
   for(; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
-
     grid_map::Position p(*iter_x, *iter_y);
-    if (!std::isinf(p[0]) && !std::isinf(p[1])) {
-      if (!gridmap_.isInside(p)) {
-        dims[0] = std::min(dims[0], p[0]);
-        dims[1] = std::min(dims[1], p[1]);
-        dims[2] = std::max(dims[2], p[0]);
-        dims[3] = std::max(dims[3], p[1]);
-      }
+    if (!std::isinf(p[0]) && !std::isinf(p[1]) && !std::isnan(p[0]) && !std::isnan(p[1])) {
+        dims[0] = std::min(p[0], dims[0]);
+        dims[1] = std::min(p[1], dims[1]);
+        dims[2] = std::max(p[0], dims[2]);
+        dims[3] = std::max(p[1], dims[3]);
+    }
+  }
 
-      grid_map::Index i;
-      if(gridmap_.getIndex(grid_map::Position(*iter_x, *iter_y), i)) {
+  if (std::none_of(dims.begin(), dims.end(), [](double val) { return std::isinf(val);}))
+  {
+    grid_map::GridMap new_frame = grid_map::GridMap({"elevation"});
+    new_frame.setFrameId(map_frame_);
+    new_frame.setGeometry(grid_map::Length((dims[2] - dims[0]), (dims[3] - dims[1])), 
+                          0.05, 
+                          grid_map::Position((dims[0] + dims[2]) / 2, (dims[1] + dims[3]) / 2));
+    grid_map::Index i;
+
+    sensor_msgs::PointCloud2ConstIterator<float> iter_x(cloud_transformed, "x");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_y(cloud_transformed, "y");
+    sensor_msgs::PointCloud2ConstIterator<float> iter_z(cloud_transformed, "z");
+    for(; iter_x != iter_x.end(); ++iter_x, ++iter_y, ++iter_z) {
+      if(new_frame.getIndex(grid_map::Position(*iter_x, *iter_y), i)) {
         cell_points[{i[0], i[1]}].push_back(*iter_z);
       }
     }
-  }
 
-  if(std::any_of(dims.begin(), dims.end(), [](double val) { return val != 0.0; }))
-  {
-    dims = {dims[0] - 0.05, dims[1] - 0.05, dims[2] + 0.05, dims[3] + 0.05};
-    grid_map::GridMap new_grid;
-    grid_map::Length new_length = grid_map::Length((dims[2] - dims[0]), (dims[3] - dims[1]));
-    grid_map::Position new_origin((dims[0] + dims[2]) / 2, (dims[1] + dims[3]) / 2);
-    new_grid.setGeometry(new_length, 0.05, new_origin);
-    gridmap_.extendToInclude(new_grid);
-  }
-
-  for(auto &c : cell_points)
-  {
-    auto i = c.first;
-    auto &vs = c.second;
-    if (vs.size() > 0) {
-      float avg_z = std::accumulate(vs.begin(), vs.end(), 0.0f) / vs.size();
-      grid_map::Index idx;
-      idx[0] = i.first;
-      idx[1] = i.second;
-      if (!gridmap_.isValid(idx, "elevation")) {
-        gridmap_.at("elevation", idx) = avg_z;
+    for(auto &c : cell_points)
+    {
+      auto i = c.first;
+      auto &vs = c.second;
+      if (vs.size() > 0) {
+        float avg_z = std::accumulate(vs.begin(), vs.end(), 0.0f) / vs.size();
+        grid_map::Index new_idx;
+        new_idx[0] = i.first;
+        new_idx[1] = i.second;
+        grid_map::Index old_idx;
+        grid_map::Position match_pos;
+        new_frame.getPosition(new_idx, match_pos);
+        gridmap_.getIndex(match_pos, old_idx);
+        if (!gridmap_.isValid(old_idx, "elevation")) {
+          new_frame.at("elevation", new_idx) = avg_z;
+        }
+        else {
+          float last_z = gridmap_.at("elevation", old_idx);
+          new_frame.at("elevation", new_idx) = (1.0 - alpha_) * last_z + alpha_ * avg_z;
+        }
       }
-      else {
-        float last_z = gridmap_.at("elevation", idx);
-        gridmap_.at("elevation", idx) = (1.0 - alpha_) * last_z + alpha_ * avg_z;
-      }
-
     }
-  }
 
-  grid_map::GridMap filtered_gridmap;
-  if (!filterChain_.update(gridmap_, filtered_gridmap)) {
-    RCLCPP_ERROR(node_->get_logger(), "Could not update the grid map filter chain!");
-    return;
-  }
+    grid_map::GridMap filtered_frame;
+    if (!filterChain_.update(new_frame, filtered_frame)) {
+      RCLCPP_ERROR(node_->get_logger(), "Could not update the grid map filter chain!");
+      return;
+    }
 
-  auto message = grid_map::GridMapRosConverter::toMessage(filtered_gridmap);
-  message->header.stamp = node_->now();
-  gridmap_pub_->publish(*message);
+    gridmap_.addDataFrom(filtered_frame, true, true, false, {"elevation", "slope"});
+
+    auto message = grid_map::GridMapRosConverter::toMessage(gridmap_);
+    message->header.stamp = node_->now();
+    gridmap_pub_->publish(*message);
+  }
 }
 
 } // namespace elevation_mapping
